@@ -1,57 +1,80 @@
 const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
+const cors = require("cors");
 
 const app = express();
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: "*"
-  }
-});
-
 const PORT = process.env.PORT || 3000;
 
+app.use(cors());
+app.use(express.json());
+
+// Store players in memory
+const players = {};
+
 app.get("/", (req, res) => {
-  res.json({
-    status: "online",
-    message: "Game server is running"
-  });
+    res.json({
+        status: "online",
+        message: "Game server is running",
+        players: Object.keys(players).length
+    });
 });
 
-io.on("connection", (socket) => {
-  console.log("Player connected:", socket.id);
+// Create a new player
+app.post("/players", (req, res) => {
+    const id = "player_" + Date.now();
 
-  socket.emit("serverMessage", {
-    message: "Connected to the game server!"
-  });
+    players[id] = {
+        id: id,
+        x: 50,
+        y: 50,
+        health: 100,
+        score: 0
+    };
 
-  socket.on("playerJoin", (player) => {
-    console.log("Player joined:", player);
-
-    socket.broadcast.emit("playerJoined", {
-      id: socket.id,
-      player: player
-    });
-  });
-
-  socket.on("playerMove", (data) => {
-    socket.broadcast.emit("playerMoved", {
-      id: socket.id,
-      position: data.position
-    });
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Player disconnected:", socket.id);
-
-    socket.broadcast.emit("playerLeft", {
-      id: socket.id
-    });
-  });
+    res.json(players[id]);
 });
 
-server.listen(PORT, () => {
-  console.log(`Game server running on port ${PORT}`);
+// Get all players
+app.get("/players", (req, res) => {
+    res.json(players);
+});
+
+// Update a player's position
+app.put("/players/:id", (req, res) => {
+    const id = req.params.id;
+
+    if (!players[id]) {
+        return res.status(404).json({
+            error: "Player not found"
+        });
+    }
+
+    const { x, y, health, score } = req.body;
+
+    if (x !== undefined) players[id].x = x;
+    if (y !== undefined) players[id].y = y;
+    if (health !== undefined) players[id].health = health;
+    if (score !== undefined) players[id].score = score;
+
+    res.json(players[id]);
+});
+
+// Delete a player
+app.delete("/players/:id", (req, res) => {
+    const id = req.params.id;
+
+    if (!players[id]) {
+        return res.status(404).json({
+            error: "Player not found"
+        });
+    }
+
+    delete players[id];
+
+    res.json({
+        message: "Player removed"
+    });
+});
+
+app.listen(PORT, () => {
+    console.log(`Game server running on port ${PORT}`);
 });
